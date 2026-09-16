@@ -80,8 +80,9 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_forgemagie_user ON forgemagie(userId);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
   CREATE INDEX IF NOT EXISTS idx_panobuilds_user ON pano_builds(userId);
-  CREATE INDEX IF NOT EXISTS idx_panobuilds_visibility ON pano_builds(visibility);
 `;
+// NB : l'index sur pano_builds(visibility) est créé APRÈS les ALTER TABLE
+// (voir init), car sur une ancienne base la colonne peut ne pas exister encore.
 
 // ── Persistance : écrit la base mémoire sur disque ────────────
 function persist() {
@@ -113,6 +114,8 @@ async function init() {
   try { dbi.run("ALTER TABLE pano_builds ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"); } catch {}
   try { dbi.run("ALTER TABLE pano_builds ADD COLUMN category TEXT NOT NULL DEFAULT ''"); } catch {}
   try { dbi.run("ALTER TABLE pano_builds ADD COLUMN username TEXT NOT NULL DEFAULT ''"); } catch {}
+  // Index sur visibility créé ICI, une fois la colonne garantie présente.
+  try { dbi.run("CREATE INDEX IF NOT EXISTS idx_panobuilds_visibility ON pano_builds(visibility)"); } catch {}
   ready = true;
 
   migrateFromJSON();
