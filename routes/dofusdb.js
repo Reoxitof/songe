@@ -30,8 +30,8 @@ const ANKAMA_AVATAR = 'https://static.ankama.com/dofus/ng/modules/mmorpg/encyclo
 //   depuis notre domaine. Route PUBLIQUE (les <img> n'envoient pas
 //   le token JWT) et en cache mémoire.
 // ─────────────────────────────────────────────────────────────
-const _avatarCache = new Map(); // breed → { buf, type, expire }
-const AVATAR_TTL = 1000 * 60 * 60 * 24; // 24h
+const _avatarCache = new Map(); // breed => { buf, type, expire }
+const AVATAR_TTL = 86400000; // 24h en millisecondes
 
 router.get('/avatar/:breed', async (req, res) => {
   const breed = parseInt(req.params.breed, 10);
@@ -45,10 +45,9 @@ router.get('/avatar/:breed', async (req, res) => {
     return res.end(hit.buf);
   }
   try {
-    // fetch SANS en-tête Referer → Ankama renvoie l'image
-    const r = await fetch(`${ANKAMA_AVATAR}/${breed}.jpg`, {
-      headers: { 'Accept': 'image/*' },
-    });
+    // fetch SANS en-tete Referer -> Ankama renvoie l'image
+    const avatarUrl = ANKAMA_AVATAR + '/' + breed + '.jpg';
+    const r = await fetch(avatarUrl, { headers: { 'Accept': 'image/*' } });
     if (!r.ok) return res.status(502).end();
     const type = r.headers.get('content-type') || 'image/jpeg';
     const buf = Buffer.from(await r.arrayBuffer());
