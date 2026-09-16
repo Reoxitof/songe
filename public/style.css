@@ -1810,6 +1810,7 @@ footer {
 }
 .price-item-name .rune-icon { width: 22px; height: 22px; vertical-align: -6px; }
 .forge-rune-pill .rune-icon { width: 15px; height: 15px; vertical-align: -3px; margin-right: .2rem; }
+.rune-icon-sm { width: 14px; height: 14px; object-fit: contain; vertical-align: -2px; margin-right: .3rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .set-bonus-chip .stat-img { width: 15px; height: 15px; }
 .item-tooltip .stat-img { width: 16px; height: 16px; }
 .pano-cmp-stat .stat-img { width: 16px; height: 16px; }
@@ -2036,3 +2037,59 @@ footer {
 .item-tooltip .tip-fm-title {
   font-size: .7rem; font-weight: 700; color: #e0a53a; margin-bottom: .2rem;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   BUILDS : sauvegarde (visibilité) & galerie communautaire
+   ══════════════════════════════════════════════════════════════ */
+
+/* Toggle Privé / Public dans la modale de sauvegarde */
+.pano-visibility-toggle { display:flex; gap:.5rem; }
+.pano-vis-opt {
+  flex:1; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  color:var(--text-muted); cursor:pointer; font-size:.85rem; font-weight:600; padding:.55rem .8rem;
+  transition:all .2s;
+}
+.pano-vis-opt:hover { color:var(--text); border-color:var(--border-glow); }
+.pano-vis-opt.active[data-vis="private"] { color:var(--blue); border-color:var(--blue-dim); background:rgba(77,184,255,.1); }
+.pano-vis-opt.active[data-vis="public"]  { color:var(--gold); border-color:var(--gold-dim); background:rgba(240,192,64,.1); }
+
+/* Barre de filtres de la galerie communautaire */
+.community-filters {
+  display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem;
+}
+.community-filters input[type="text"] { flex:2; min-width:160px; }
+.community-filters select { flex:1; min-width:130px; }
+.community-filters input, .community-filters select {
+  background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  color:var(--text); font-size:.85rem; padding:.5rem .7rem; outline:none;
+}
+.community-filters input:focus, .community-filters select:focus { border-color:var(--gold-dim); }
+
+/* Grille de cartes de builds publics */
+.community-results {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  gap:.85rem; max-height:52vh; overflow-y:auto; padding-right:.25rem;
+}
+.community-card {
+  background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius);
+  padding:.85rem .95rem; display:flex; flex-direction:column; gap:.5rem;
+  transition:border-color .2s, transform .15s;
+}
+.community-card:hover { border-color:var(--gold-dim); transform:translateY(-2px); }
+.community-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:.5rem; }
+.community-card-name { font-weight:700; font-size:.92rem; line-height:1.25; overflow:hidden; text-overflow:ellipsis; }
+.community-card-score { font-size:.72rem; color:var(--gold); font-weight:700; white-space:nowrap; }
+.community-card-meta { display:flex; gap:.4rem; flex-wrap:wrap; font-size:.68rem; }
+.community-badge {
+  background:rgba(157,111,255,.12); border:1px solid var(--purple-dim); border-radius:999px;
+  color:var(--purple); padding:.12rem .55rem; text-transform:uppercase; letter-spacing:.04em; font-weight:700;
+}
+.community-badge.cat { background:rgba(240,192,64,.1); border-color:var(--gold-dim); color:var(--gold); }
+.community-card-author { font-size:.72rem; color:var(--text-muted); }
+.community-card-items { display:flex; gap:.2rem; flex-wrap:wrap; }
+.community-card-items img { width:22px; height:22px; object-fit:contain; border-radius:4px; background:var(--bg-card); }
+.community-card-actions { display:flex; gap:.5rem; margin-top:.15rem; }
+.community-card-actions button { flex:1; font-size:.78rem; padding:.4rem .5rem; }
+
+/* Petit sélecteur de catégorie affiché sous "Sauver" */
+#pano-save-category-wrap select { background:var(--bg-card2); }

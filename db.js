@@ -67,16 +67,20 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS pano_builds (
     id       TEXT PRIMARY KEY,
     userId   TEXT NOT NULL,
+    username TEXT NOT NULL DEFAULT '',
     name     TEXT NOT NULL,
     class    TEXT NOT NULL DEFAULT '',
     items    TEXT NOT NULL DEFAULT '{}',
     globalFm TEXT NOT NULL DEFAULT '[]',
+    visibility TEXT NOT NULL DEFAULT 'private',
+    category TEXT NOT NULL DEFAULT '',
     date     TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_sessions_user   ON sessions(userId);
   CREATE INDEX IF NOT EXISTS idx_forgemagie_user ON forgemagie(userId);
   CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
   CREATE INDEX IF NOT EXISTS idx_panobuilds_user ON pano_builds(userId);
+  CREATE INDEX IF NOT EXISTS idx_panobuilds_visibility ON pano_builds(visibility);
 `;
 
 // ── Persistance : écrit la base mémoire sur disque ────────────
@@ -106,6 +110,9 @@ async function init() {
   dbi.run(SCHEMA);
   try { dbi.run("ALTER TABLE forgemagie ADD COLUMN tentativeStatut TEXT NOT NULL DEFAULT 'inconnu'"); } catch {}
   try { dbi.run("ALTER TABLE forgemagie ADD COLUMN exo INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { dbi.run("ALTER TABLE pano_builds ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"); } catch {}
+  try { dbi.run("ALTER TABLE pano_builds ADD COLUMN category TEXT NOT NULL DEFAULT ''"); } catch {}
+  try { dbi.run("ALTER TABLE pano_builds ADD COLUMN username TEXT NOT NULL DEFAULT ''"); } catch {}
   ready = true;
 
   migrateFromJSON();
@@ -306,8 +313,9 @@ const requests = {
 function rowToBuild(r) {
   if (!r) return null;
   return {
-    id: r.id, userId: r.userId, name: r.name, class: r.class,
-    items: parseJSON(r.items, {}), globalFm: parseJSON(r.globalFm, []), date: r.date,
+    id: r.id, userId: r.userId, username: r.username || '', name: r.name, class: r.class,
+    items: parseJSON(r.items, {}), globalFm: parseJSON(r.globalFm, []),
+    visibility: r.visibility || 'private', category: r.category || '', date: r.date,
   };
 }
 
@@ -318,12 +326,41 @@ const panoBuilds = {
   find(id, userId) {
     return rowToBuild(get('SELECT * FROM pano_builds WHERE id = ? AND userId = ?', [id, userId]));
   },
+  /** Un build public, consultable/clonable par n'importe quel utilisateur connecté. */
+  findPublic(id) {
+    return rowToBuild(get("SELECT * FROM pano_builds WHERE id = ? AND visibility = 'public'", [id]));
+  },
+  /** Galerie communautaire : builds publics, filtrables par catégorie / classe / nom. */
+  publicList({ category, cls, q, limit = 30, offset = 0 } = {}) {
+    const clauses = ["visibility = 'public'"];
+    const params  = [];
+    if (category) { clauses.push('category = ?'); params.push(category); }
+    if (cls)      { clauses.push('class = ?');     params.push(cls); }
+    if (q)        { clauses.push('LOWER(name) LIKE ?'); params.push(`%${q.toLowerCase()}%`); }
+    const where = clauses.join(' AND ');
+    const rows  = query(
+      `SELECT * FROM pano_builds WHERE ${where} ORDER BY date DESC LIMIT ? OFFSET ?`,
+      [...params, limit + 1, offset]
+    );
+    const hasMore = rows.length > limit;
+    return { items: rows.slice(0, limit).map(rowToBuild), hasMore };
+  },
   insert(b) {
-    run(`INSERT INTO pano_builds (id, userId, name, class, items, globalFm, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [b.id, b.userId, b.name, b.class || '', JSON.stringify(b.items || {}),
-         JSON.stringify(b.globalFm || []), b.date]);
+    run(`INSERT INTO pano_builds (id, userId, username, name, class, items, globalFm, visibility, category, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [b.id, b.userId, b.username || '', b.name, b.class || '', JSON.stringify(b.items || {}),
+         JSON.stringify(b.globalFm || []), b.visibility || 'private', b.category || '', b.date]);
     return b;
+  },
+  update(id, userId, changes) {
+    const fields = [], params = [];
+    for (const [k, v] of Object.entries(changes)) {
+      if (k === 'items' || k === 'globalFm') { fields.push(`${k} = ?`); params.push(JSON.stringify(v)); }
+      else { fields.push(`${k} = ?`); params.push(v); }
+    }
+    if (!fields.length) return;
+    params.push(id, userId);
+    run(`UPDATE pano_builds SET ${fields.join(', ')} WHERE id = ? AND userId = ?`, params);
   },
   remove(id, userId)      { run('DELETE FROM pano_builds WHERE id = ? AND userId = ?', [id, userId]); },
   countByUser(userId)     { return get('SELECT COUNT(*) AS c FROM pano_builds WHERE userId = ?', [userId]).c; },

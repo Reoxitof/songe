@@ -51,7 +51,7 @@ router.get('/stats', (req, res) => {
     return res.json({
       total: 0, benefices: 0, pertes: 0, neutres: 0,
       totalBenefice: 0, totalInvesti: 0, totalVente: 0, margeGlobale: 0,
-      exoAttempts: 0, exoSuccesses: 0, coutMoyenExo: null, byItem: [],
+      exoAttempts: 0, exoSuccesses: 0, coutMoyenExo: null, byItem: [], history: [],
     });
   }
 
@@ -59,6 +59,7 @@ router.get('/stats', (req, res) => {
   let benefices = 0, pertes = 0, neutres = 0;
   let exoAttempts = 0, exoSuccesses = 0, exoCost = 0;
   const byItem = {};
+  const byDay  = {};
 
   forges.forEach(f => {
     const r = calcResult(f);
@@ -68,9 +69,14 @@ router.get('/stats', (req, res) => {
     if (r.benefice > 0) benefices++;
     else if (r.benefice < 0) pertes++;
     else neutres++;
+
+    // ── Rentabilité par item ────────────────────────────────
     const key = (f.itemNom || 'Inconnu').toLowerCase();
-    const item = byItem[key] ||= { itemNom: f.itemNom || 'Inconnu', attempts: 0, known: 0, successes: 0, totalCost: 0 };
-    item.attempts++; item.totalCost += r.coutTotal;
+    const item = byItem[key] ||= {
+      itemNom: f.itemNom || 'Inconnu', attempts: 0, known: 0, successes: 0,
+      totalCost: 0, totalBenefice: 0,
+    };
+    item.attempts++; item.totalCost += r.coutTotal; item.totalBenefice += r.benefice;
     if (f.tentativeStatut !== 'inconnu') {
       item.known++;
       if (f.tentativeStatut === 'succes') item.successes++;
@@ -79,10 +85,19 @@ router.get('/stats', (req, res) => {
       exoAttempts++; exoCost += r.coutTotal;
       if (f.tentativeStatut === 'succes') exoSuccesses++;
     }
+
+    // ── Historique jour par jour (pour le graphique de tendance) ─
+    const day = String(f.date || '').slice(0, 10) || 'inconnu';
+    const bucket = byDay[day] ||= { date: day, benefice: 0, invested: 0, count: 0 };
+    bucket.benefice += r.benefice; bucket.invested += r.coutTotal; bucket.count++;
   });
 
   const margeGlobale = totalInvesti > 0
     ? Math.round((totalBenefice / totalInvesti) * 1000) / 10 : 0;
+
+  const history = Object.values(byDay)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-60); // 60 derniers jours avec activité
 
   return res.json({
     total: forges.length, benefices, pertes, neutres,
@@ -92,7 +107,8 @@ router.get('/stats', (req, res) => {
     byItem: Object.values(byItem).map(i => ({ ...i,
       coutMoyen: Math.round(i.totalCost / i.attempts),
       tauxReussite: i.known ? Math.round((i.successes / i.known) * 1000) / 10 : null,
-    })).sort((a, b) => b.attempts - a.attempts),
+    })).sort((a, b) => b.totalBenefice - a.totalBenefice),
+    history,
   });
 });
 

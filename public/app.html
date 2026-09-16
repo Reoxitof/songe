@@ -53,6 +53,27 @@
     .forge-sum-card.neg .forge-sum-val{color:var(--red)}
     .forge-sum-card.gold .forge-sum-val{color:var(--gold)}
 
+    /* ── Classement rentabilité par item (FM) ─────────────────── */
+    .forge-ranking{display:flex;flex-direction:column;gap:.4rem}
+    .forge-rank-row{display:grid;grid-template-columns:1.6rem 1fr auto auto;gap:.6rem;align-items:center;background:var(--bg-card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.5rem .75rem;font-size:.82rem}
+    .forge-rank-pos{font-weight:800;color:var(--text-dim);text-align:center}
+    .forge-rank-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .forge-rank-meta{font-size:.7rem;color:var(--text-muted);white-space:nowrap}
+    .forge-rank-val{font-weight:700;text-align:right;white-space:nowrap}
+    .forge-rank-val.pos{color:var(--teal)}
+    .forge-rank-val.neg{color:var(--red)}
+
+    /* ── Top drops (onglet stats) ───────────────────────────── */
+    .drop-rank-list{display:flex;flex-direction:column;gap:.35rem}
+    .drop-rank-row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;background:var(--bg-card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.4rem .7rem;font-size:.8rem}
+    .drop-rank-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .drop-rank-qty{color:var(--text-muted);font-size:.72rem;white-space:nowrap}
+    .drop-rank-val{font-weight:700;color:var(--gold);white-space:nowrap}
+
+    /* ── Score de panoplie : détail par catégorie ─────────────── */
+    .pano-score-breakdown{display:flex;flex-wrap:wrap;gap:.4rem .8rem;font-size:.72rem;color:var(--text-muted);margin-top:.4rem}
+    .pano-score-breakdown b{color:var(--text)}
+
     /* Modal forgemagie */
     .forge-modal-runes{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.5rem;max-height:220px;overflow-y:auto}
     .forge-rune-row{display:grid;grid-template-columns:1fr 70px 90px auto;gap:.4rem;align-items:center}
@@ -215,6 +236,20 @@
         <h2 class="card-title">Valeur par session</h2>
         <div class="chart-container"><canvas id="chart-sessions"></canvas></div>
       </div>
+
+      <div class="card" style="margin-top:1.25rem">
+        <h2 class="card-title">🏆 Top drops</h2>
+        <div class="two-col">
+          <div>
+            <h3 class="section-title" style="font-size:.82rem;margin-bottom:.5rem">✦ Légendes les plus rentables</h3>
+            <div id="drop-legends-list" class="drop-rank-list"><p class="empty-msg">Aucune donnée.</p></div>
+          </div>
+          <div>
+            <h3 class="section-title" style="font-size:.82rem;margin-bottom:.5rem">🔷 Runes les plus rentables</h3>
+            <div id="drop-runes-list" class="drop-rank-list"><p class="empty-msg">Aucune donnée.</p></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ══ TAB FORGEMAGIE ══ -->
@@ -304,6 +339,18 @@
         <!-- Résumé stats -->
         <div id="forge-summary" class="forge-summary"></div>
 
+        <!-- Évolution du bénéfice -->
+        <div class="card chart-card" style="margin-bottom:1.25rem">
+          <h2 class="card-title" style="font-size:.95rem">📈 Évolution du bénéfice (par jour)</h2>
+          <div class="chart-container" style="height:180px"><canvas id="chart-forge"></canvas></div>
+        </div>
+
+        <!-- Classement par item -->
+        <div class="card" style="margin-bottom:1.25rem">
+          <h2 class="card-title" style="font-size:.95rem">🏅 Rentabilité par item</h2>
+          <div id="forge-ranking" class="forge-ranking"></div>
+        </div>
+
         <!-- Filtres -->
         <div class="forge-filters">
           <span style="font-size:.78rem;color:var(--text-muted)">Filtrer :</span>
@@ -331,6 +378,7 @@
           <button class="btn-secondary" id="btn-pano-sets" style="font-size:.82rem">🔍 Panoplies</button>
           <button class="btn-secondary" id="btn-pano-save" style="font-size:.82rem">💾 Sauver</button>
           <button class="btn-secondary" id="btn-pano-compare" style="font-size:.82rem">⚖️ Comparer</button>
+          <button class="btn-secondary" id="btn-pano-community" style="font-size:.82rem">🌐 Communauté</button>
           <button class="btn-danger" id="btn-pano-reset" style="font-size:.82rem">↺ Vider</button>
         </div>
       </div>
@@ -405,7 +453,10 @@
               <label>Résistances <input type="number" id="score-resist" min="0" max="20" step="0.5" value="1"/></label>
               <label>Initiative <input type="number" id="score-initiative" min="0" max="20" step="0.5" value="0.05"/></label>
               <label>Prospection <input type="number" id="score-prospecting" min="0" max="20" step="0.5" value="1"/></label>
+              <label>PA/PM/PO <input type="number" id="score-apmpo" min="0" max="500" step="5" value="120"/></label>
+              <label>Vitalité <input type="number" id="score-vitality" min="0" max="5" step="0.05" value="0.05"/></label>
             </div>
+            <div id="pano-score-breakdown" class="pano-score-breakdown"></div>
           </div>
           <div class="pano-stats-tabs">
             <button class="pano-stats-tab active" data-stab="stats">Stats</button>
@@ -469,6 +520,55 @@
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" id="modal-compare-cancel">Fermer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL SAUVEGARDE DE BUILD (nom + visibilité + catégorie) -->
+    <div id="modal-pano-save-overlay" class="modal-overlay hidden">
+      <div class="modal" style="max-width:440px">
+        <h3>💾 Sauvegarder le build</h3>
+        <div class="form-group">
+          <label for="pano-save-name">Nom du build</label>
+          <input type="text" id="pano-save-name" maxlength="40" placeholder="Ex: Iop crit PvM 200" class="full" />
+        </div>
+        <div class="form-group">
+          <label>Visibilité</label>
+          <div class="pano-visibility-toggle">
+            <button type="button" class="pano-vis-opt active" data-vis="private">🔒 Privé</button>
+            <button type="button" class="pano-vis-opt" data-vis="public">🌐 Public</button>
+          </div>
+          <p class="card-desc" style="margin:.4rem 0 0;font-size:.72rem">Un build public apparaît dans la Communauté, visible et clonable par tous.</p>
+        </div>
+        <div class="form-group" id="pano-save-category-wrap" style="display:none">
+          <label for="pano-save-category">Catégorie</label>
+          <select id="pano-save-category" class="full"></select>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="modal-pano-save-cancel">Annuler</button>
+          <button class="btn-primary" id="modal-pano-save-confirm">💾 Sauvegarder</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL COMMUNAUTÉ (galerie de builds publics) -->
+    <div id="modal-community-overlay" class="modal-overlay hidden">
+      <div class="modal modal-wide">
+        <h3>🌐 Communauté — builds publics</h3>
+        <div class="community-filters">
+          <input type="text" id="community-search" placeholder="🔍 Nom du build..." />
+          <select id="community-category"><option value="">Toutes catégories</option></select>
+          <select id="community-class"><option value="">Toutes classes</option></select>
+          <button class="btn-secondary" id="community-refresh" style="font-size:.8rem">🔄</button>
+        </div>
+        <div id="community-results" class="community-results">
+          <p class="empty-msg" style="font-size:.82rem;padding:.5rem 0">⏳ Chargement...</p>
+        </div>
+        <div class="pano-browse-more">
+          <button class="btn-secondary" id="community-more" style="display:none">Charger plus</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="modal-community-cancel">Fermer</button>
         </div>
       </div>
     </div>

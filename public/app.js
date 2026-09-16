@@ -70,7 +70,7 @@ const state = {
   panoClass: '',                 // classe sélectionnée (visuel)
   panoBrowse: { slot: '', page: 1, loaded: false, stats: [], typeId: '' }, // état onglet "Parcourir"
   panoGlobalFm: [],              // exos FM globaux [{name, val}] appliqués à toute la panoplie
-  panoScoreWeights: { damage: 1, resist: 1, initiative: .05, prospecting: 1 },
+  panoScoreWeights: { damage: 1, resist: 1, initiative: .05, prospecting: 1, apmpo: 120, vitality: .05 },
   // cache prix
   pricesCache: null,
 };
@@ -81,6 +81,8 @@ const _abortCtrls = {};
 let _panoStatsGen = 0;
 let _chartState = null;
 let _chartResizeObs = null;
+let _forgeChartStats = null;
+let _forgeChartResizeObs = null;
 
 function beginAbortable(key, alsoAbort = []) {
   [key, ...alsoAbort].forEach(k => _abortCtrls[k]?.abort());
@@ -612,7 +614,55 @@ async function renderStats() {
     document.getElementById('s-best-session').textContent=sessions.length>0?fmtK(bV):'—';
     document.getElementById('s-sessions-count').textContent=sessions.length;
     renderChart(sessions,prices);
+    renderDropRanking(sessions,prices);
   }catch{}
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOP DROPS — légendes & runes les plus rentables sur l'ensemble
+// des sessions (quantité totale × prix unitaire configuré)
+// ══════════════════════════════════════════════════════════════
+function renderDropRanking(sessions, prices) {
+  const legWrap = document.getElementById('drop-legends-list');
+  const runeWrap = document.getElementById('drop-runes-list');
+  if (!legWrap || !runeWrap) return;
+
+  function tally(field) {
+    const totals = {}; // name -> { qty, value }
+    sessions.forEach(s => (s[field] || []).forEach(i => {
+      if (!i?.name) return;
+      const t = totals[i.name] ||= { name: i.name, qty: 0, value: 0 };
+      t.qty += i.qty || 0;
+    }));
+    return totals;
+  }
+
+  function priceFor(name, isRune) {
+    if (isRune) {
+      const t = findRunePrice(name, prices);
+      return t ? (t.price || 0) : 0;
+    }
+    const t = (prices.legendesSonge || []).find(t => t.name === name);
+    return t ? (t.price || 0) : 0;
+  }
+
+  function renderList(wrap, totals, isRune) {
+    const rows = Object.values(totals)
+      .map(t => ({ ...t, value: t.qty * priceFor(t.name, isRune) }))
+      .filter(t => t.qty > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+    if (!rows.length) { wrap.innerHTML = '<p class="empty-msg">Aucune donnée.</p>'; return; }
+    wrap.innerHTML = rows.map(r => `
+      <div class="drop-rank-row">
+        <span class="drop-rank-name">${isRune ? runeIcon(r.name, 'rune-icon-sm') : '✦ '}${escHtml(r.name)}</span>
+        <span class="drop-rank-qty">×${r.qty.toLocaleString('fr-FR')}</span>
+        <span class="drop-rank-val">${fmtK(r.value)}</span>
+      </div>`).join('');
+  }
+
+  renderList(legWrap, tally('legendes'), false);
+  renderList(runeWrap, tally('runes'), true);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -686,6 +736,23 @@ function initChartResize() {
     }, 80);
   });
   _chartResizeObs.observe(wrap);
+}
+
+function initForgeChartResize() {
+  const canvas = document.getElementById('chart-forge');
+  const wrap = canvas?.parentElement;
+  if (!wrap || _forgeChartResizeObs) return;
+  if (typeof ResizeObserver === 'undefined') return;
+  let t;
+  _forgeChartResizeObs = new ResizeObserver(() => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (!_forgeChartStats) return;
+      if (!document.getElementById('tab-forgemagie')?.classList.contains('active')) return;
+      renderForgeChart(_forgeChartStats);
+    }, 80);
+  });
+  _forgeChartResizeObs.observe(wrap);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -908,6 +975,8 @@ async function renderForgeList() {
 
     // Résumé stats
     renderForgeSummary(stats);
+    renderForgeRanking(stats);
+    renderForgeChart(stats);
 
     container.innerHTML='';
     if(!forges.length){container.innerHTML='<p class="empty-msg">Aucune entrée trouvée.</p>';return;}
@@ -1019,9 +1088,82 @@ function renderForgeSummary(stats) {
       <div class="forge-sum-val">${stats.exoSuccesses || 0} / ${stats.exoAttempts || 0}</div>
     </div>
     <div class="forge-sum-card gold">
-      <div class="forge-sum-lbl">Rentabilité par item</div>
-      <div class="forge-sum-val" style="font-size:.82rem">${(stats.byItem || []).slice(0, 2).map(i => `${escHtml(i.itemNom)} · ${i.tauxReussite === null ? '—' : i.tauxReussite+'%'}`).join('<br>') || '—'}</div>
+      <div class="forge-sum-lbl">Item le + rentable</div>
+      <div class="forge-sum-val" style="font-size:.82rem">${stats.byItem?.[0] ? escHtml(stats.byItem[0].itemNom) + ' · ' + fmtK(stats.byItem[0].totalBenefice) : '—'}</div>
     </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CLASSEMENT DE RENTABILITÉ PAR ITEM (FM)
+// ══════════════════════════════════════════════════════════════
+function renderForgeRanking(stats) {
+  const el = document.getElementById('forge-ranking');
+  if (!el) return;
+  const items = (stats.byItem || []).filter(i => i.attempts > 0);
+  if (!items.length) { el.innerHTML = '<p class="empty-msg">Aucune donnée pour l’instant.</p>'; return; }
+
+  // Déjà trié par bénéfice total décroissant côté serveur.
+  el.innerHTML = items.map((i, idx) => {
+    const cls = i.totalBenefice > 0 ? 'pos' : i.totalBenefice < 0 ? 'neg' : '';
+    return `
+      <div class="forge-rank-row">
+        <span class="forge-rank-pos">${idx + 1}</span>
+        <span class="forge-rank-name">${escHtml(i.itemNom)}</span>
+        <span class="forge-rank-meta">${i.attempts} essai${i.attempts > 1 ? 's' : ''}${i.tauxReussite !== null ? ' · ' + i.tauxReussite + '% réussite' : ''}</span>
+        <span class="forge-rank-val ${cls}">${fmtK(i.totalBenefice)}</span>
+      </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// GRAPHIQUE : ÉVOLUTION DU BÉNÉFICE FM (par jour)
+// ══════════════════════════════════════════════════════════════
+function renderForgeChart(stats) {
+  const canvas = document.getElementById('chart-forge');
+  if (!canvas) return;
+  _forgeChartStats = stats;
+  const ctx = canvas.getContext('2d'), dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth, H = 180;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const data = stats.history || [];
+  if (!data.length) {
+    ctx.fillStyle = '#4a4a6a'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'center';
+    ctx.fillText('Aucune donnée', W / 2, H / 2);
+    return;
+  }
+
+  const pL = 56, pR = 16, pT = 16, pB = 28, cW = W - pL - pR, cH = H - pT - pB;
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.benefice)), 1);
+  const zeroY = pT + cH / 2;
+  const slot = cW / data.length;
+  const bW = Math.min(32, Math.max(4, slot - 4));
+  const labelEvery = data.length > 10 ? Math.ceil(data.length / 8) : 1;
+
+  // Ligne zéro
+  ctx.strokeStyle = '#2a2f52'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pL, zeroY); ctx.lineTo(W - pR, zeroY); ctx.stroke();
+  ctx.fillStyle = '#7a7aa0'; ctx.font = '10px Segoe UI'; ctx.textAlign = 'right';
+  ctx.fillText(fmtK(maxAbs), pL - 4, pT + 8);
+  ctx.fillText('0', pL - 4, zeroY + 4);
+  ctx.fillText('-' + fmtK(maxAbs), pL - 4, pT + cH - 2);
+
+  data.forEach((d, idx) => {
+    const h = (Math.abs(d.benefice) / maxAbs) * (cH / 2);
+    const x = pL + slot * idx + (slot - bW) / 2;
+    const y = d.benefice >= 0 ? zeroY - h : zeroY;
+    ctx.fillStyle = d.benefice >= 0 ? '#3ddbbd' : '#ff5555';
+    ctx.fillRect(x, y, bW, Math.max(1, h));
+
+    if (idx % labelEvery === 0 || idx === data.length - 1) {
+      const dd = new Date(d.date);
+      ctx.fillStyle = '#7a7aa0'; ctx.font = '10px Segoe UI'; ctx.textAlign = 'center';
+      ctx.fillText(`${String(dd.getDate()).padStart(2, '0')}/${String(dd.getMonth() + 1).padStart(2, '0')}`, x + bW / 2, pT + cH + 14);
+    }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1635,6 +1777,7 @@ function initPano() {
   const scoreInputs = {
     damage: document.getElementById('score-damage'), resist: document.getElementById('score-resist'),
     initiative: document.getElementById('score-initiative'), prospecting: document.getElementById('score-prospecting'),
+    apmpo: document.getElementById('score-apmpo'), vitality: document.getElementById('score-vitality'),
   };
   Object.entries(scoreInputs).forEach(([key, input]) => {
     if (!input) return;
@@ -1672,10 +1815,13 @@ function initPano() {
     renderPano();
   });
 
-  // Boutons : recherche de panoplies, sauvegarde, comparaison
+  // Boutons : recherche de panoplies, sauvegarde, comparaison, communauté
   document.getElementById('btn-pano-sets')?.addEventListener('click', openSetSearch);
-  document.getElementById('btn-pano-save')?.addEventListener('click', savePanoBuild);
+  document.getElementById('btn-pano-save')?.addEventListener('click', openSaveBuildModal);
   document.getElementById('btn-pano-compare')?.addEventListener('click', openCompare);
+  document.getElementById('btn-pano-community')?.addEventListener('click', openCommunityModal);
+  initSaveBuildModal();
+  initCommunityModal();
 
   // Recherche live de panoplies (debounce)
   let setDeb;
@@ -1874,27 +2020,190 @@ function equipWholeSet(set) {
 // SAUVEGARDE & COMPARAISON DE BUILDS
 // ══════════════════════════════════════════════════════════════
 // Builds sauvegardés en base (liés au compte) via /api/pano-builds
+// ── Catégories (miroir de routes/panobuilds.js CATEGORIES) ────
+const PANO_CATEGORIES = ['PvM', 'PvP', 'Farm / Ressources', 'Leveling', 'Craft / Multi', 'Autre'];
+
 async function loadPanoBuilds() {
   try { return (await api('GET', '/pano-builds')) || []; }
   catch { return []; }
 }
 
-async function savePanoBuild() {
-  const items = Object.values(state.panoItems);
-  if (!items.length) { toast('Équipe des items avant de sauvegarder.', 'error'); return; }
-  const name = prompt('Nom du build :', state.panoClass ? `Build ${state.panoClass}` : 'Mon build');
-  if (!name) return;
+// ══════════════════════════════════════════════════════════════
+// SAUVEGARDE DE BUILD — nom + visibilité (privé/public) + catégorie
+// ══════════════════════════════════════════════════════════════
+let _panoSaveVisibility = 'private';
+
+function initSaveBuildModal() {
+  const catSel = document.getElementById('pano-save-category');
+  if (catSel && !catSel.options.length) {
+    catSel.innerHTML = PANO_CATEGORIES.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  }
+  document.querySelectorAll('.pano-vis-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _panoSaveVisibility = btn.dataset.vis;
+      document.querySelectorAll('.pano-vis-opt').forEach(b => b.classList.toggle('active', b === btn));
+      const catWrap = document.getElementById('pano-save-category-wrap');
+      if (catWrap) catWrap.style.display = _panoSaveVisibility === 'public' ? 'block' : 'none';
+    });
+  });
+  document.getElementById('modal-pano-save-cancel')?.addEventListener('click', () => {
+    document.getElementById('modal-pano-save-overlay')?.classList.add('hidden');
+  });
+  document.getElementById('modal-pano-save-confirm')?.addEventListener('click', confirmSaveBuild);
+}
+
+function openSaveBuildModal() {
+  if (!Object.keys(state.panoItems).length) { toast('Équipe des items avant de sauvegarder.', 'error'); return; }
+  const nameInput = document.getElementById('pano-save-name');
+  if (nameInput) nameInput.value = state.panoClass ? `Build ${state.panoClass}` : 'Mon build';
+  _panoSaveVisibility = 'private';
+  document.querySelectorAll('.pano-vis-opt').forEach(b => b.classList.toggle('active', b.dataset.vis === 'private'));
+  const catWrap = document.getElementById('pano-save-category-wrap');
+  if (catWrap) catWrap.style.display = 'none';
+  document.getElementById('modal-pano-save-overlay')?.classList.remove('hidden');
+  nameInput?.focus();
+}
+
+async function confirmSaveBuild() {
+  const nameInput = document.getElementById('pano-save-name');
+  const name = (nameInput?.value || '').trim();
+  if (!name) { toast('Donne un nom à ton build.', 'error'); return; }
+  const category = document.getElementById('pano-save-category')?.value || 'Autre';
+
   try {
     await api('POST', '/pano-builds', {
-      name: name.trim().slice(0, 40),
+      name: name.slice(0, 40),
       class: state.panoClass || '',
       items: state.panoItems,          // snapshot des items (avec effets + fm)
       globalFm: state.panoGlobalFm || [],
+      visibility: _panoSaveVisibility,
+      category,
     });
-    toast(`Build « ${name.trim()} » sauvegardé.`);
+    document.getElementById('modal-pano-save-overlay')?.classList.add('hidden');
+    toast(_panoSaveVisibility === 'public'
+      ? `Build « ${name} » publié dans la Communauté.`
+      : `Build « ${name} » sauvegardé.`);
   } catch (err) {
     toast(err.message || 'Erreur de sauvegarde.', 'error');
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMMUNAUTÉ — galerie de builds publics (parcourir / cloner)
+// ══════════════════════════════════════════════════════════════
+const communityBrowse = { page: 1 };
+
+function initCommunityModal() {
+  const catSel = document.getElementById('community-category');
+  if (catSel && catSel.options.length <= 1) {
+    catSel.innerHTML += PANO_CATEGORIES.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  }
+  const clsSel = document.getElementById('community-class');
+  if (clsSel && clsSel.options.length <= 1) {
+    clsSel.innerHTML += DOFUS_CLASSES.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  }
+  document.getElementById('modal-community-cancel')?.addEventListener('click', () => {
+    document.getElementById('modal-community-overlay')?.classList.add('hidden');
+  });
+  document.getElementById('community-refresh')?.addEventListener('click', () => loadCommunityResults(true));
+  document.getElementById('community-category')?.addEventListener('change', () => loadCommunityResults(true));
+  document.getElementById('community-class')?.addEventListener('change', () => loadCommunityResults(true));
+  document.getElementById('community-more')?.addEventListener('click', () => loadCommunityResults(false));
+  let deb;
+  document.getElementById('community-search')?.addEventListener('input', () => {
+    clearTimeout(deb);
+    deb = setTimeout(() => loadCommunityResults(true), 300);
+  });
+}
+
+function openCommunityModal() {
+  document.getElementById('modal-community-overlay')?.classList.remove('hidden');
+  loadCommunityResults(true);
+}
+
+async function loadCommunityResults(reset) {
+  const box = document.getElementById('community-results');
+  const moreBtn = document.getElementById('community-more');
+  if (!box) return;
+  if (reset) { communityBrowse.page = 1; box.innerHTML = '<p class="empty-msg" style="font-size:.82rem;padding:.5rem 0">⏳ Chargement...</p>'; }
+  if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = '⏳ ...'; }
+
+  const q        = document.getElementById('community-search')?.value.trim() || '';
+  const category = document.getElementById('community-category')?.value || '';
+  const cls      = document.getElementById('community-class')?.value || '';
+  const params = [`page=${communityBrowse.page}`];
+  if (q) params.push(`q=${encodeURIComponent(q)}`);
+  if (category) params.push(`category=${encodeURIComponent(category)}`);
+  if (cls) params.push(`class=${encodeURIComponent(cls)}`);
+
+  try {
+    const data = await api('GET', `/pano-builds/public?${params.join('&')}`, null, beginAbortable('community'));
+    if (!data) return;
+    if (reset) box.innerHTML = '';
+    if (reset && !data.items.length) {
+      box.innerHTML = '<p class="empty-msg" style="font-size:.82rem;padding:.5rem 0">Aucun build public pour ces filtres.</p>';
+    } else {
+      const cards = await Promise.all(data.items.map(renderCommunityCard));
+      cards.forEach(el => box.appendChild(el));
+    }
+    if (moreBtn) {
+      moreBtn.disabled = false;
+      moreBtn.textContent = 'Charger plus';
+      moreBtn.style.display = data.hasMore ? 'inline-block' : 'none';
+    }
+    communityBrowse.page++;
+  } catch (err) {
+    if (isAbortError(err)) return;
+    if (reset) box.innerHTML = `<p class="empty-msg" style="color:var(--red);font-size:.82rem">Erreur : ${escHtml(err.message)}</p>`;
+    if (moreBtn) { moreBtn.disabled = false; moreBtn.textContent = 'Réessayer'; }
+  }
+}
+
+async function renderCommunityCard(build) {
+  const el = document.createElement('div');
+  el.className = 'community-card';
+  const items = Object.values(build.items || {});
+  const totals = await computeBuildTotals(build.items, build.globalFm);
+  const score = Math.round(computePanoScore(totals).total);
+  const itemsHtml = items.slice(0, 8).map(it =>
+    `<img src="${escHtml(it.image || '')}" alt="" title="${escHtml(it.name || '')}" loading="lazy"/>`).join('');
+
+  el.innerHTML = `
+    <div class="community-card-head">
+      <span class="community-card-name">${escHtml(build.name)}</span>
+      <span class="community-card-score">⚡ ${score.toLocaleString('fr-FR')}</span>
+    </div>
+    <div class="community-card-meta">
+      ${build.class ? `<span class="community-badge">${escHtml(build.class)}</span>` : ''}
+      ${build.category ? `<span class="community-badge cat">${escHtml(build.category)}</span>` : ''}
+    </div>
+    <div class="community-card-author">👤 ${escHtml(build.username || 'Anonyme')} · ${items.length} item${items.length > 1 ? 's' : ''}</div>
+    <div class="community-card-items">${itemsHtml}</div>
+    <div class="community-card-actions">
+      <button class="btn-secondary btn-community-load" data-id="${escHtml(build.id)}">⬇️ Charger</button>
+    </div>`;
+
+  el.querySelector('.btn-community-load')?.addEventListener('click', () => cloneCommunityBuild(build));
+  return el;
+}
+
+function cloneCommunityBuild(build) {
+  if (Object.keys(state.panoItems).length && !confirm('Charger ce build remplacera ta panoplie actuelle. Continuer ?')) return;
+  state.panoItems = JSON.parse(JSON.stringify(build.items || {}));
+  state.panoClass = build.class || '';
+  state.panoGlobalFm = JSON.parse(JSON.stringify(build.globalFm || []));
+  persistPanoDraft();
+  document.getElementById('modal-community-overlay')?.classList.add('hidden');
+  const clsSel = document.getElementById('pano-class');
+  if (clsSel) clsSel.value = state.panoClass;
+  renderPanoClass();
+  renderPano();
+  toast(`Build « ${build.name} » chargé dans ton éditeur.`);
+}
+
+async function savePanoBuild() {
+  // Conservé pour compatibilité — redirige vers la nouvelle modale.
+  openSaveBuildModal();
 }
 
 // Calcule les stats totales d'un ensemble d'items (avec bonus de panoplie)
@@ -1982,7 +2291,7 @@ async function openCompare() {
   }).join('');
 
   // Score + différences par rapport au premier build (le build actuel si présent).
-  const scoreVals = totalsList.map(computePanoScore);
+  const scoreVals = totalsList.map(t => computePanoScore(t).total);
   const scoreMax = Math.max(...scoreVals);
   const scoreCells = scoreVals.map((value, index) => {
     const delta = index ? Math.round(value - scoreVals[0]) : null;
@@ -2485,10 +2794,28 @@ async function renderPanoStats() {
 
 function renderPanoScore(totals) {
   const target = document.getElementById('pano-score-value');
+  const breakdownEl = document.getElementById('pano-score-breakdown');
   if (!target) return;
-  target.textContent = Math.round(computePanoScore(totals)).toLocaleString('fr-FR');
+  const { total, damage, resist, initiative, prospecting, apmpo, vitality } = computePanoScore(totals);
+  target.textContent = Math.round(total).toLocaleString('fr-FR');
+  if (breakdownEl) {
+    const parts = [
+      ['⚔️ Dégâts',      damage],
+      ['🛡 Résist.',      resist],
+      ['⚡ Initiative',   initiative],
+      ['🍀 Prospection',  prospecting],
+      ['🏃 PA/PM/PO',     apmpo],
+      ['❤️ Vitalité',     vitality],
+    ].filter(([, v]) => Math.abs(v) > 0.01);
+    breakdownEl.innerHTML = parts.length
+      ? parts.map(([lbl, v]) => `<span>${lbl} <b>${Math.round(v).toLocaleString('fr-FR')}</b></span>`).join('')
+      : '';
+  }
 }
 
+// Score global du build : combine dégâts, résistances et stats
+// secondaires selon les pondérations réglables par l'utilisateur.
+// Renvoie le détail par catégorie pour affichage (pas juste le total).
 function computePanoScore(totals) {
   const w = state.panoScoreWeights;
   let damage = 0, resist = 0;
@@ -2497,9 +2824,26 @@ function computePanoScore(totals) {
     if (n.includes('dommage')) damage += Number(value) || 0;
     if (n.includes('résistance') || n.includes('resistance')) resist += Number(value) || 0;
   });
-  return damage * w.damage + resist * w.resist
-    + (Number(totals.Initiative) || 0) * w.initiative
-    + (Number(totals.Prospection) || 0) * w.prospecting;
+  const initiativeRaw = Number(totals.Initiative) || 0;
+  const prospectingRaw = Number(totals.Prospection) || 0;
+  // PA/PM/PO sont des stats rares et à très forte valeur relative en jeu :
+  // on les compte séparément avec un poids dédié plutôt que de les noyer
+  // dans "dégâts". La vitalité contribue à la survie, poids faible par défaut.
+  const apmpoRaw = (Number(totals.PA) || 0) + (Number(totals.PM) || 0) + (Number(totals.PO) || 0);
+  const vitalityRaw = Number(totals.Vitalité) || 0;
+
+  const scoredDamage      = damage * w.damage;
+  const scoredResist      = resist * w.resist;
+  const scoredInitiative  = initiativeRaw * w.initiative;
+  const scoredProspecting = prospectingRaw * w.prospecting;
+  const scoredApmpo       = apmpoRaw * (w.apmpo ?? 0);
+  const scoredVitality    = vitalityRaw * (w.vitality ?? 0);
+
+  return {
+    total: scoredDamage + scoredResist + scoredInitiative + scoredProspecting + scoredApmpo + scoredVitality,
+    damage: scoredDamage, resist: scoredResist, initiative: scoredInitiative,
+    prospecting: scoredProspecting, apmpo: scoredApmpo, vitality: scoredVitality,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2909,6 +3253,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   safeInit('exportButtons', injectExportButtons);
   safeInit('userButton', injectUserButton);
   safeInit('chartResize', initChartResize);
+  safeInit('forgeChartResize', initForgeChartResize);
 
   // Rendu initial en parallèle
   await Promise.all([
