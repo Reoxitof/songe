@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Songe Tracker — Administration</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Admin overrides ───────────────────────────────────── */
+    :root { --admin-accent: #f0c040; }
+
+    .admin-header { background: linear-gradient(135deg,#0e1022,#1a1240); border-bottom:1px solid var(--border); padding:0 2rem; position:sticky; top:0; z-index:100; box-shadow:0 2px 32px rgba(240,192,64,.12); }
+    .admin-header-inner { max-width:1400px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:64px; gap:1rem; }
+    .admin-logo { display:flex; align-items:center; gap:.75rem; }
+    .admin-logo-icon { font-size:1.6rem; }
+    .admin-logo h1 { font-size:1.15rem; font-weight:700; background:linear-gradient(90deg,var(--gold),var(--red)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .admin-logo p { font-size:.68rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.1em; }
+    .admin-badge { background:rgba(255,85,85,.12); border:1px solid var(--red-dim); border-radius:999px; color:var(--red); font-size:.7rem; font-weight:700; letter-spacing:.08em; padding:.2rem .65rem; text-transform:uppercase; }
+
+    /* Stats bar */
+    .admin-stats-bar { display:flex; gap:.75rem; flex-wrap:wrap; }
+    .admin-stat { background:var(--bg-card2); border:1px solid var(--border); border-radius:999px; padding:.3rem .9rem; display:flex; align-items:center; gap:.5rem; font-size:.78rem; }
+    .admin-stat .val { font-weight:700; color:var(--gold); }
+
+    /* Layout */
+    .admin-main { max-width:1400px; margin:0 auto; padding:1.5rem 2rem 4rem; }
+
+    /* Tabs */
+    .admin-tabs { display:flex; gap:.5rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border); padding-bottom:.75rem; flex-wrap:wrap; }
+    .admin-tab { background:transparent; border:1px solid transparent; border-radius:var(--radius-sm); color:var(--text-muted); cursor:pointer; font-size:.88rem; padding:.45rem 1.1rem; transition:all .2s; }
+    .admin-tab:hover { color:var(--text); background:var(--bg-card2); }
+    .admin-tab.active { color:var(--gold); background:rgba(240,192,64,.08); border-color:var(--gold-dim); font-weight:600; }
+    .admin-tab-content { display:none; }
+    .admin-tab-content.active { display:block; }
+
+    /* Toolbar */
+    .admin-toolbar { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; margin-bottom:1.25rem; }
+    .admin-search { background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:.875rem; padding:.45rem .85rem; width:260px; outline:none; }
+    .admin-search:focus { border-color:var(--gold-dim); }
+
+    /* Table utilisateurs */
+    .users-table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    thead th { background:var(--bg-card2); border-bottom:2px solid var(--border); color:var(--text-muted); font-size:.72rem; font-weight:700; letter-spacing:.08em; padding:.65rem .85rem; text-align:left; text-transform:uppercase; white-space:nowrap; }
+    tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+    tbody tr:hover { background:var(--bg-card2); }
+    tbody td { padding:.7rem .85rem; vertical-align:middle; }
+    .td-actions { display:flex; gap:.4rem; flex-wrap:wrap; }
+
+    /* Badges */
+    .badge { border-radius:999px; font-size:.68rem; font-weight:700; letter-spacing:.06em; padding:.18rem .55rem; text-transform:uppercase; }
+    .badge-admin  { background:rgba(240,192,64,.15); border:1px solid var(--gold-dim); color:var(--gold); }
+    .badge-user   { background:rgba(77,184,255,.1);  border:1px solid var(--blue-dim); color:var(--blue); }
+    .badge-banned { background:rgba(255,85,85,.12);  border:1px solid var(--red-dim);  color:var(--red); }
+    .badge-active { background:rgba(61,219,189,.1);  border:1px solid var(--teal-dim); color:var(--teal); }
+
+    /* Action buttons dans tableau */
+    .btn-tbl { background:none; border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; font-size:.72rem; padding:.28rem .6rem; transition:all .2s; white-space:nowrap; }
+    .btn-tbl:hover { border-color:var(--border-glow); }
+    .btn-tbl.promote  { color:var(--gold);   border-color:var(--gold-dim);   } .btn-tbl.promote:hover { background:rgba(240,192,64,.1); }
+    .btn-tbl.demote   { color:var(--text-muted); }
+    .btn-tbl.ban      { color:var(--red);    border-color:var(--red-dim);    } .btn-tbl.ban:hover    { background:rgba(255,85,85,.1);  }
+    .btn-tbl.unban    { color:var(--teal);   border-color:var(--teal-dim);   } .btn-tbl.unban:hover  { background:rgba(61,219,189,.1); }
+    .btn-tbl.detail   { color:var(--purple); border-color:var(--purple-dim); } .btn-tbl.detail:hover { background:rgba(157,111,255,.1); }
+    .btn-tbl.del      { color:var(--red);    border-color:var(--red-dim);    } .btn-tbl.del:hover    { background:rgba(255,85,85,.1);  }
+    .btn-tbl.pwd      { color:var(--blue);   border-color:var(--blue-dim);   } .btn-tbl.pwd:hover    { background:rgba(77,184,255,.1); }
+
+    /* Panel détail utilisateur */
+    .user-detail-panel { background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; margin-bottom:1.25rem; animation:slideIn .2s ease; }
+    .user-detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:.5rem; }
+    .user-detail-name { font-size:1.1rem; font-weight:700; }
+    .user-detail-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:.6rem; margin-bottom:1rem; }
+    .user-detail-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:.6rem .85rem; }
+    .user-detail-stat .lbl { font-size:.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; }
+    .user-detail-stat .val { font-size:1.1rem; font-weight:700; color:var(--text); }
+    .sessions-mini { display:flex; flex-direction:column; gap:.4rem; max-height:260px; overflow-y:auto; }
+    .session-mini-row { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:.45rem .7rem; display:flex; justify-content:space-between; font-size:.78rem; }
+
+    /* Modal créer/éditer compte */
+    .form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+    .admin-msg { font-size:.82rem; padding:.55rem .8rem; border-radius:var(--radius-sm); margin-bottom:.75rem; display:none; }
+    .admin-msg.visible { display:block; }
+    .admin-msg.error   { background:rgba(255,85,85,.1); border:1px solid var(--red-dim); color:var(--red); }
+    .admin-msg.success { background:rgba(61,219,189,.1); border:1px solid var(--teal-dim); color:var(--teal); }
+
+    /* Logs / activité */
+    .activity-list { display:flex; flex-direction:column; gap:.4rem; }
+    .activity-item { background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:.5rem .85rem; display:flex; align-items:center; gap:.75rem; font-size:.8rem; }
+    .activity-icon { font-size:1.1rem; }
+    .activity-meta { flex:1; }
+    .activity-time { font-size:.7rem; color:var(--text-dim); }
+
+    @media(max-width:640px){
+      .admin-main{padding:1rem 1rem 3rem;}
+      .admin-header-inner{height:auto;padding:.65rem 0;flex-direction:column;align-items:flex-start;}
+      .admin-stats-bar{width:100%;overflow-x:auto;}
+      table{font-size:.75rem;}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER ADMIN -->
+  <header class="admin-header">
+    <div class="admin-header-inner">
+      <div class="admin-logo">
+        <span class="admin-logo-icon">🛡️</span>
+        <div>
+          <h1>Administration</h1>
+          <p>Songe Tracker — Panel Admin</p>
+        </div>
+      </div>
+      <div class="admin-stats-bar" id="admin-stats-bar">
+        <div class="admin-stat">⏳ Chargement...</div>
+      </div>
+      <div style="display:flex;gap:.6rem;align-items:center">
+        <span class="admin-badge">Admin</span>
+        <button id="btn-go-app" class="btn-secondary" style="font-size:.75rem;padding:.3rem .8rem">🎮 App</button>
+        <button id="btn-logout" class="btn-secondary" style="font-size:.75rem;padding:.3rem .8rem;color:var(--red)">⎋ Déco</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="admin-main">
+
+    <!-- TABS -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-tab="users">👥 Utilisateurs</button>
+      <button class="admin-tab"        data-tab="create">➕ Créer un compte</button>
+      <button class="admin-tab"        data-tab="overview">📊 Vue globale</button>
+    </div>
+
+    <!-- ══ TAB UTILISATEURS ══ -->
+    <div id="admin-tab-users" class="admin-tab-content active">
+
+      <!-- Détail utilisateur (masqué par défaut) -->
+      <div id="user-detail-panel" style="display:none"></div>
+
+      <div class="card">
+        <div class="admin-toolbar">
+          <input type="text" id="admin-search" class="admin-search" placeholder="🔍 Rechercher un utilisateur..." />
+          <button class="btn-secondary" id="btn-refresh-users" style="font-size:.82rem">🔄 Actualiser</button>
+        </div>
+
+        <div class="users-table-wrap">
+          <table id="users-table">
+            <thead>
+              <tr>
+                <th>Utilisateur</th>
+                <th>Rôle</th>
+                <th>Statut</th>
+                <th>Sessions</th>
+                <th>Inscription</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:2rem">⏳ Chargement...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TAB CRÉER COMPTE ══ -->
+    <div id="admin-tab-create" class="admin-tab-content">
+      <div class="card" style="max-width:520px">
+        <h2 class="card-title">➕ Créer un compte utilisateur</h2>
+        <div class="admin-msg error"   id="create-err"></div>
+        <div class="admin-msg success" id="create-ok"></div>
+        <div class="form-group">
+          <label for="create-username">Nom d'utilisateur *</label>
+          <input type="text" id="create-username" placeholder="3-30 car." maxlength="30" />
+        </div>
+        <div class="form-group">
+          <label for="create-password">Mot de passe *</label>
+          <input type="password" id="create-password" placeholder="Minimum 8 caractères" maxlength="128" />
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" id="create-is-admin" style="width:16px;height:16px" />
+            Compte administrateur
+          </label>
+        </div>
+        <button class="btn-primary" id="btn-create-user" style="max-width:220px">➕ Créer le compte</button>
+      </div>
+    </div>
+
+    <!-- ══ TAB VUE GLOBALE ══ -->
+    <div id="admin-tab-overview" class="admin-tab-content">
+      <div id="overview-content">
+        <div class="stats-grid" id="overview-grid"></div>
+        <div class="card" style="margin-top:1.25rem">
+          <h2 class="card-title">📋 Derniers utilisateurs inscrits</h2>
+          <div id="recent-users-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL RÉINITIALISER MOT DE PASSE -->
+  <div id="modal-reset-pwd" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>🔑 Réinitialiser le mot de passe</h3>
+      <input type="hidden" id="reset-uid" />
+      <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem">
+        Utilisateur : <strong id="reset-username-display"></strong>
+      </p>
+      <div class="admin-msg error"   id="reset-err"></div>
+      <div class="admin-msg success" id="reset-ok"></div>
+      <div class="form-group">
+        <label>Nouveau mot de passe</label>
+        <input type="password" id="reset-new-pwd" placeholder="Minimum 8 caractères" maxlength="128" />
+      </div>
+      <div class="form-group">
+        <label>Confirmer</label>
+        <input type="password" id="reset-new-pwd2" placeholder="Retapez le mot de passe" maxlength="128" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="modal-reset-cancel">Annuler</button>
+        <button class="btn-primary"   id="modal-reset-confirm">🔑 Appliquer</button>
+      </div>
+    </div>
+  </div>
+
+  <footer><p>Songe Tracker v2 — Panel Administration</p></footer>
+
+  <script src="admin.js"></script>
+</body>
+</html>

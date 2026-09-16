@@ -1,0 +1,3 @@
+# Ce fichier DOIT exister pour que CloudLinux/Passenger y injecte
+# ses directives de routage Node.js au démarrage de l'app.
+# Ne pas supprimer. cPanel gère automatiquement le contenu ci-dessous.
