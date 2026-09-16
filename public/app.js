@@ -1753,19 +1753,7 @@ function initPano() {
   // (Les listeners internes du modal — recherche, onglets, "charger plus",
   //  fermeture — sont posés dans ensureItemModal() à chaque création.)
 
-  // Sélecteur de classe
-  const clsSel = document.getElementById('pano-class');
-  if (clsSel) {
-    // Remplir la liste des classes
-    clsSel.innerHTML = '<option value="">— Classe —</option>' +
-      DOFUS_CLASSES.map(c => `<option value="${c}">${c}</option>`).join('');
-    clsSel.value = state.panoClass || '';
-    clsSel.addEventListener('change', () => {
-      state.panoClass = clsSel.value;
-      persistPanoDraft();
-      renderPanoClass();
-    });
-  }
+  // Choix de la classe via les pastilles en haut (plus de menu déroulant)
   ensureClassStrip();
   renderPanoClass();
 
@@ -2385,7 +2373,8 @@ const CLASS_THEME = {
 
 function classAvatarUrl(cls) {
   const id = CLASS_THEME[cls]?.breed;
-  return id ? `${CLASS_AVATAR_BASE}/${id}.jpg` : '';
+  // On passe par notre proxy serveur (Ankama bloque le hotlinking par Referer)
+  return id ? `/api/dofusdb/avatar/${id}` : '';
 }
 
 function ensureClassStrip() {
@@ -2401,9 +2390,8 @@ function ensureClassStrip() {
     btn.setAttribute('role', 'option');
     btn.innerHTML = `<img src="${escHtml(classAvatarUrl(c))}" alt="${escHtml(c)}" loading="lazy"/>`;
     btn.addEventListener('click', () => {
-      state.panoClass = c;
-      const sel = document.getElementById('pano-class');
-      if (sel) sel.value = c;
+      // Re-cliquer sur la classe active la désélectionne
+      state.panoClass = (state.panoClass === c) ? '' : c;
       persistPanoDraft();
       renderPanoClass();
     });
@@ -2415,6 +2403,10 @@ function ensureClassStrip() {
 function renderPanoClass() {
   const cls = state.panoClass || '';
   const theme = CLASS_THEME[cls];
+
+  // Met en évidence la pastille de classe active
+  document.querySelectorAll('.pano-class-chip').forEach(ch =>
+    ch.classList.toggle('active', ch.dataset.class === cls));
 
   const badge = document.getElementById('pano-class-badge');
   if (badge) badge.textContent = cls || '';

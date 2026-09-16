@@ -1,0 +1,30 @@
+---
+# ═══════════════════════════════════════════════════════════════
+# Déploiement Git cPanel — Songe Tracker (dsonge.reoxitof.com)
+# ───────────────────────────────────────────────────────────────
+# À la réception d'un push (ou via "Deploy HEAD Commit" dans cPanel),
+# ces commandes copient le code vers le dossier de production.
+#
+# IMPORTANT — NE SONT PAS COPIÉS (volontairement) :
+#   - .env        (secrets : identifiants admin, JWT_SECRET)
+#   - data/       (base SQLite des utilisateurs / sessions / builds)
+#   - .htaccess   (géré par CloudLinux/Passenger, ne pas écraser)
+#   - node_modules/ (installé côté serveur, pas versionné)
+#
+# APRÈS déploiement : faire "Restart" de l'app Node.js dans cPanel
+# (Setup Node.js App) pour recharger server.js / db.js / routes.
+# ═══════════════════════════════════════════════════════════════
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/reoxitof/dsonge.reoxitof.com
+    # Dossiers applicatifs (récursif)
+    - /bin/cp -R public $DEPLOYPATH/
+    - /bin/cp -R routes $DEPLOYPATH/
+    - /bin/cp -R lib $DEPLOYPATH/
+    - /bin/cp -R middleware $DEPLOYPATH/
+    # Fichiers racine
+    - /bin/cp server.js $DEPLOYPATH/
+    - /bin/cp app.js $DEPLOYPATH/
+    - /bin/cp db.js $DEPLOYPATH/
+    - /bin/cp package.json $DEPLOYPATH/
+    - /bin/cp package-lock.json $DEPLOYPATH/

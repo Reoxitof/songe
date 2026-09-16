@@ -18,10 +18,51 @@ const express         = require('express');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
 
 // ── Config API ────────────────────────────────────────────────
 const API_BASE = 'https://api.dofusdu.de/dofus3/v1/fr';
+const ANKAMA_AVATAR = 'https://static.ankama.com/dofus/ng/modules/mmorpg/encyclopedia/unity/breeds/assets/avatar';
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/dofusdb/avatar/:breed  — PROXY image d'avatar de classe
+//   Ankama bloque le hotlinking par Referer (403 si Referer présent).
+//   On récupère l'image côté serveur (sans Referer) et on la sert
+//   depuis notre domaine. Route PUBLIQUE (les <img> n'envoient pas
+//   le token JWT) et en cache mémoire.
+// ─────────────────────────────────────────────────────────────
+const _avatarCache = new Map(); // breed => { buf, type, expire }
+const AVATAR_TTL = 86400000; // 24h en millisecondes
+
+router.get('/avatar/:breed', async (req, res) => {
+  const breed = parseInt(req.params.breed, 10);
+  if (!Number.isInteger(breed) || breed < 1 || breed > 20) {
+    return res.status(400).end();
+  }
+  const hit = _avatarCache.get(breed);
+  if (hit && hit.expire > Date.now()) {
+    res.set('Content-Type', hit.type);
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.end(hit.buf);
+  }
+  try {
+    // fetch SANS en-tete Referer -> Ankama renvoie l'image
+    const avatarUrl = ANKAMA_AVATAR + '/' + breed + '.jpg';
+    const r = await fetch(avatarUrl, { headers: { 'Accept': 'image/*' } });
+    if (!r.ok) return res.status(502).end();
+    const type = r.headers.get('content-type') || 'image/jpeg';
+    const buf = Buffer.from(await r.arrayBuffer());
+    _avatarCache.set(breed, { buf, type, expire: Date.now() + AVATAR_TTL });
+    res.set('Content-Type', type);
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.end(buf);
+  } catch (err) {
+    console.error('[dofusdb avatar]', err.message);
+    return res.status(502).end();
+  }
+});
+
+// À partir d'ici, toutes les routes exigent l'authentification.
+router.use(requireAuth);
 
 // ── Cache mémoire simple (clé → { data, expire }) ─────────────
 const cache = new Map();
