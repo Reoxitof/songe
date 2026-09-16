@@ -2058,16 +2058,30 @@ footer {
    BUILDS : sauvegarde (visibilité) & galerie communautaire
    ══════════════════════════════════════════════════════════════ */
 
+/* Badge visibilité cliquable dans le tableau de comparaison */
+.pano-vis-badge {
+  display:inline-block; margin-top:.35rem;
+  border:1px solid transparent; border-radius:999px;
+  padding:.12rem .5rem; font-size:.66rem; font-weight:700;
+  cursor:pointer; white-space:nowrap; transition:all .15s;
+}
+.pano-vis-badge.vis-private { color:var(--blue,#4db8ff); border-color:var(--blue-dim,#2a6a99); background:rgba(77,184,255,.1); }
+.pano-vis-badge.vis-public  { color:var(--gold,#f0c040); border-color:var(--gold-dim,#a07820); background:rgba(240,192,64,.12); }
+.pano-vis-badge:hover { filter:brightness(1.2); transform:translateY(-1px); }
+
 /* Toggle Privé / Public dans la modale de sauvegarde */
 .pano-visibility-toggle { display:flex; gap:.5rem; }
 .pano-vis-opt {
-  flex:1; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm);
-  color:var(--text-muted); cursor:pointer; font-size:.85rem; font-weight:600; padding:.55rem .8rem;
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:.15rem;
+  background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  color:var(--text-muted); cursor:pointer; padding:.6rem .8rem;
   transition:all .2s;
 }
+.pano-vis-opt .pano-vis-title { font-size:.9rem; font-weight:700; }
+.pano-vis-opt .pano-vis-desc  { font-size:.68rem; opacity:.85; }
 .pano-vis-opt:hover { color:var(--text); border-color:var(--border-glow); }
-.pano-vis-opt.active[data-vis="private"] { color:var(--blue); border-color:var(--blue-dim); background:rgba(77,184,255,.1); }
-.pano-vis-opt.active[data-vis="public"]  { color:var(--gold); border-color:var(--gold-dim); background:rgba(240,192,64,.1); }
+.pano-vis-opt.active[data-vis="private"] { color:var(--blue); border-color:var(--blue-dim); background:rgba(77,184,255,.12); }
+.pano-vis-opt.active[data-vis="public"]  { color:var(--gold); border-color:var(--gold-dim); background:rgba(240,192,64,.12); }
 
 /* Barre de filtres de la galerie communautaire */
 .community-filters {

@@ -2274,8 +2274,18 @@ async function openCompare() {
   const headCells = all.map((b) => {
     const del = b.current ? '' :
       `<button class="pano-cmp-del" data-bid="${escHtml(b.id)}" title="Supprimer">✕</button>`;
+    // Badge de visibilité + bouton bascule (sauf pour la colonne "Actuel")
+    let visHtml = '';
+    if (!b.current) {
+      const isPub = b.visibility === 'public';
+      const cls = isPub ? 'vis-public' : 'vis-private';
+      const label = isPub ? '🌐 Public' : '🔒 Privé';
+      const title = isPub ? 'Rendre privé' : 'Rendre public';
+      visHtml = `<button class="pano-vis-badge ${cls}" data-bid="${escHtml(b.id)}" data-vis="${isPub ? 'public' : 'private'}" title="${title}">${label}</button>`;
+    }
     return `<th><div class="pano-cmp-head">${escHtml(b.name)}${del}</div>
-      <div class="pano-cmp-sub">${escHtml(b.class || '—')}</div></th>`;
+      <div class="pano-cmp-sub">${escHtml(b.class || '—')}</div>
+      ${visHtml}</th>`;
   }).join('');
 
   // Score + différences par rapport au premier build (le build actuel si présent).
@@ -2314,6 +2324,21 @@ async function openCompare() {
         await api('DELETE', `/pano-builds/${encodeURIComponent(bid)}`);
         openCompare(); // recharge
       } catch (err) { toast(err.message || 'Erreur suppression.', 'error'); }
+    });
+  });
+
+  // Basculer la visibilité privé/public (via API PATCH)
+  body.querySelectorAll('.pano-vis-badge').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const bid = btn.dataset.bid;
+      const next = btn.dataset.vis === 'public' ? 'private' : 'public';
+      if (!bid) return;
+      if (next === 'public' && !confirm('Rendre ce build PUBLIC ? Il sera visible et clonable par tous dans la Communauté.')) return;
+      try {
+        await api('PATCH', `/pano-builds/${encodeURIComponent(bid)}`, { visibility: next });
+        toast(next === 'public' ? '🌐 Build rendu public.' : '🔒 Build rendu privé.');
+        openCompare(); // recharge
+      } catch (err) { toast(err.message || 'Erreur mise à jour.', 'error'); }
     });
   });
 }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dofus — Tracker de Songes</title>
-  <link rel="stylesheet" href="style.css?v=26" />
+  <link rel="stylesheet" href="style.css?v=27" />
   <style>
     /* ── Forgemagie spécifique ─────────────────────────────── */
     .forge-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
@@ -532,12 +532,18 @@
           <input type="text" id="pano-save-name" maxlength="40" placeholder="Ex: Iop crit PvM 200" class="full" />
         </div>
         <div class="form-group">
-          <label>Visibilité</label>
+          <label>Qui peut voir ce build ?</label>
           <div class="pano-visibility-toggle">
-            <button type="button" class="pano-vis-opt active" data-vis="private">🔒 Privé</button>
-            <button type="button" class="pano-vis-opt" data-vis="public">🌐 Public</button>
+            <button type="button" class="pano-vis-opt active" data-vis="private">
+              <span class="pano-vis-title">🔒 Privé</span>
+              <span class="pano-vis-desc">Toi seul</span>
+            </button>
+            <button type="button" class="pano-vis-opt" data-vis="public">
+              <span class="pano-vis-title">🌐 Public</span>
+              <span class="pano-vis-desc">Visible par tous</span>
+            </button>
           </div>
-          <p class="card-desc" style="margin:.4rem 0 0;font-size:.72rem">Un build public apparaît dans la Communauté, visible et clonable par tous.</p>
+          <p class="card-desc" style="margin:.4rem 0 0;font-size:.72rem">🔒 Privé : seul toi le vois. 🌐 Public : il apparaît dans la Communauté, visible et clonable par tous.</p>
         </div>
         <div class="form-group" id="pano-save-category-wrap" style="display:none">
           <label for="pano-save-category">Catégorie</label>
@@ -854,6 +860,6 @@
 
   <footer><p>Songe Tracker v2 — données synchronisées avec le serveur</p></footer>
 
-  <script src="app.js?v=26"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>
