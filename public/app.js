@@ -2373,7 +2373,8 @@ const CLASS_THEME = {
 
 function classAvatarUrl(cls) {
   const id = CLASS_THEME[cls]?.breed;
-  return id ? `${CLASS_AVATAR_BASE}/${id}.jpg` : '';
+  // On passe par notre proxy serveur (Ankama bloque le hotlinking par Referer)
+  return id ? `/api/dofusdb/avatar/${id}` : '';
 }
 
 function ensureClassStrip() {
